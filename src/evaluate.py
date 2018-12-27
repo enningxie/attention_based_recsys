@@ -22,12 +22,29 @@ def evaluate_model(model, testRatings, testNegatives, K, num_thread):
     _K = K
 
     hits, ndcgs = [], []
-    if num_thread > 1:  # multi-thread
-        with Pool(processes=num_thread) as p:
-            res = p.map(eval_one_rating, range(len(_testRatings)))
+    # if num_thread > 1:  # multi-thread
+    #     with Pool(processes=num_thread) as p:
+    #         res = p.map(eval_one_rating, range(len(_testRatings)))
+    #     hits = [r[0] for r in res]
+    #     ndcgs = [r[1] for r in res]
+    #     return hits, ndcgs
+
+    # if (num_thread > 1):  # Multi-thread
+    #     pool = Pool(processes=num_thread)
+    #     res = pool.map(eval_one_rating, range(len(_testRatings)))
+    #     pool.close()
+    #     pool.join()
+    #     hits = [r[0] for r in res]
+    #     ndcgs = [r[1] for r in res]
+    #     return (hits, ndcgs)
+
+    if (num_thread > 1):  # Multi-thread
+        with Pool(processes=num_thread) as pool:
+            res = pool.map(eval_one_rating, range(len(_testRatings)))
         hits = [r[0] for r in res]
         ndcgs = [r[1] for r in res]
         return hits, ndcgs
+
 
     # single thread
     for testRating_id in range(len(_testRatings)):
@@ -52,6 +69,8 @@ def eval_one_rating(idx):
         map_item_score[item] = predictions[i]
     items.pop()
     ranklist = sorted(map_item_score, key=map_item_score.get, reverse=True)[:_K]
+    # # Evaluate top rank list
+    # ranklist = heapq.nlargest(_K, map_item_score, key=map_item_score.get)
     hr = getHitRatio(ranklist, item_id)
     ndcg = getNDCG(ranklist, item_id)
     return hr, ndcg

@@ -10,28 +10,6 @@ class DataSet(object):
         assert len(self.testRatings) == len(self.testNegatives), 'error with dataSet.'
         self.num_users, self.num_items = self.trainMatrix.shape
 
-    def test_rating_to_list(self, filename):
-        rating_list = []
-        with open(filename, 'r') as f:
-            data_rating = f.readlines()
-        for rating in data_rating:
-            arr = rating.split('\t')
-            user_id, item_id = int(arr[0]), int(arr[1])
-            rating_list.append([user_id, item_id])
-        return rating_list
-
-    def test_load_negtive_file(self, filename):
-        negtive_list = []
-        with open(filename, 'r') as f:
-            data_neg = f.readlines()
-        for negtive in data_neg:
-            arr = negtive.split('\t')
-            negtives = []
-            for x in arr[1:]:
-                negtives.append(int(x))
-            negtive_list.append(negtives)
-        return negtive_list
-
     def train_rating_to_matrix(self, filename):
         '''
         read .rating file and return dok matrix
@@ -55,3 +33,26 @@ class DataSet(object):
             if rating_ > 0:
                 mat[user_id, item_id] = 1.0
         return mat
+
+    def test_rating_to_list(self, filename):
+        rating_list = []
+        with open(filename, 'r') as f:
+            data_rating = f.readlines()
+        for rating in data_rating:
+            arr = rating.split('\t')
+            user_id, item_id = int(arr[0]), int(arr[1])
+            rating_list.append([user_id, item_id])
+        return rating_list
+
+    def test_load_negtive_file(self, filename):
+        negtive_list = []
+        with open(filename, 'r') as f:
+            data_neg = f.readlines()
+        for negtive in data_neg:
+            arr = negtive.split('\t')
+            negtives = []
+            for x in arr[1:]:
+                negtives.append(int(x))
+            negtive_list.append(negtives)
+        return negtive_list
+
