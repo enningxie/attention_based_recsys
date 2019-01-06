@@ -2,13 +2,32 @@ import numpy as np
 from keras import initializers
 from keras.regularizers import l2
 from keras.models import Model
-from keras.layers import Embedding, Input, Dense, Flatten, concatenate, multiply
+from keras.layers import Embedding, Input, Dense, Flatten, concatenate, Conv1D, BatchNormalization, multiply, Activation, Dropout, Add
 from keras.optimizers import Adagrad, Adam, SGD, RMSprop
-from evaluate import evaluate_model
-from Dataset import DataSet
+from src.evaluate import evaluate_model
+from src.Dataset import DataSet
 from time import time
 import argparse
+import keras.backend as K
 
+
+def residual_layer(inputs, hidden_units, dropout=0.0):
+    input_shape = K.int_shape(inputs)[-1]
+    short_cut = inputs
+    x = inputs
+
+    x = Dense(hidden_units)(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    if dropout > 0.0:
+        x = Dropout(dropout)(x)
+
+    x = Dense(input_shape)(x)
+    x = Add()([short_cut, x])
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+
+    return x
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run MLP.")
@@ -16,19 +35,21 @@ def parse_args():
                         help='Input data path.')
     parser.add_argument('--dataset', nargs='?', default='ml-1m',
                         help='Choose a dataset.')
-    parser.add_argument('--epochs', type=int, default=100,
+    parser.add_argument('--epochs', type=int, default=20,
                         help='Number of epochs.')
     parser.add_argument('--batch_size', type=int, default=4096,
                         help='Batch size.')
-    parser.add_argument('--layers', nargs='?', default='[256,256,128,64]',
+    parser.add_argument('--layers', nargs='?', default='[32,32,16,8]',
                         help="Size of each layer. Note that the first layer is the "
                              "concatenation of user and item embeddings. So layers[0]/2 is the embedding size.")
     parser.add_argument('--num_neg', type=int, default=4,
                         help='Number of negative instances to pair with a positive instance.')
+    parser.add_argument('--atten_prob', type=int, default=48,
+                        help='for attention.')
     return parser.parse_args()
 
 
-def get_model(num_users, num_items, layers):
+def get_model(num_users, num_items, layers, atten_prob):
     num_layer = len(layers)  # Number of layers in the MLP
     # Input variables
     user_input = Input(shape=(1,), dtype='int32', name='user_input')
@@ -38,6 +59,7 @@ def get_model(num_users, num_items, layers):
                                    input_length=1)
     MLP_Embedding_Item = Embedding(input_dim=num_items, output_dim=int(layers[0] / 2), name='item_embedding',
                                    input_length=1)
+    # print(MLP_Embedding_User.output_shape)
 
     # Crucial to flatten an embedding vector!
     user_latent = Flatten()(MLP_Embedding_User(user_input))
@@ -45,10 +67,16 @@ def get_model(num_users, num_items, layers):
 
     # The 0-th layer is the concatenation of embedding layers
     # vector = merge([user_latent, item_latent], mode = 'concat')
-    vector = concatenate([user_latent, item_latent])
-    # attention_probs = Dense(64, activation='softmax', name='attention_vec')(vector)
-    # vector = multiply([vector, attention_probs], name='attention_mul')
+    vector = multiply([user_latent, item_latent])
+    vector = concatenate([user_latent, item_latent, vector])
+    # vector = BatchNormalization()(vector)
+    attention_probs = Dense(atten_prob, activation='softmax', name='attention_vec')(vector)
+    vector = multiply([vector, attention_probs], name='attention_mul')
+
+    # vector = BatchNormalization()(vector)
     # MLP layers
+    # vector = residual_layer(vector, 128)
+    # vector = residual_layer(vector, 64)
     for idx in range(1, num_layer):
         layer = Dense(layers[idx], activation='relu', name='layer%d' % idx)
         vector = layer(vector)
@@ -90,11 +118,12 @@ if __name__ == '__main__':
     num_negatives = args.num_neg
     batch_size = args.batch_size
     epochs = args.epochs
+    atten_prob = args.atten_prob
 
     topK = 10
-    evaluation_threads = 1  # mp.cpu_count()
-    print("MLP arguments: %s " % args)
-    model_out_file = '../Pretrain/%s_MLP_%s_%d.h5' % (args.dataset, args.layers, time())
+    evaluation_threads = 1 # mp.cpu_count()
+    print("MLP arguments: {} ".format(args))
+    model_out_file = '../Pretrain/{}_MLP_A_{}_{}.h5'.format(args.dataset, args.layers, time())
 
     # Loading data
     t1 = time()
@@ -102,11 +131,11 @@ if __name__ == '__main__':
     train, testRatings, testNegatives = dataset.trainMatrix, dataset.testRatings, dataset.testNegatives
     num_users, num_items = train.shape
 
-    print("Load data done [%.1f s]. #user=%d, #item=%d, #train=%d, #test=%d"
-          % (time() - t1, num_users, num_items, train.nnz, len(testRatings)))
+    print("Load data done [{:.1f} s]. #user={}, #item={}, #train={}, #test={}".format
+          (time() - t1, num_users, num_items, train.nnz, len(testRatings)))
 
     # Build model
-    model = get_model(num_users, num_items, layers)
+    model = get_model(num_users, num_items, layers, atten_prob)
     model.compile(optimizer=Adam(), loss='binary_crossentropy')
 
 
@@ -114,7 +143,7 @@ if __name__ == '__main__':
     t1 = time()
     (hits, ndcgs) = evaluate_model(model, testRatings, testNegatives, topK, evaluation_threads)
     hr, ndcg = np.array(hits).mean(), np.array(ndcgs).mean()
-    print('Init: HR = %.4f, NDCG = %.4f [%.1f]' % (hr, ndcg, time() - t1))
+    print('Init: HR = {:.4f}, NDCG = {:.4f} [{:.1f} s]'.format(hr, ndcg, time() - t1))
 
     # Train model
     best_hr, best_ndcg, best_iter = hr, ndcg, -1
@@ -127,11 +156,13 @@ if __name__ == '__main__':
                          np.array(labels),  # labels
                          batch_size=batch_size, epochs=1, verbose=0, shuffle=True)
         t2 = time()
+
         # Evaluation
         (hits, ndcgs) = evaluate_model(model, testRatings, testNegatives, topK, evaluation_threads)
         hr, ndcg, loss = np.array(hits).mean(), np.array(ndcgs).mean(), hist.history['loss'][0]
-        print('Iteration %d [%.1f s]: HR = %.4f, NDCG = %.4f, loss = %.4f [%.1f s]'
-                  % (epoch, t2 - t1, hr, ndcg, loss, time() - t2))
-        if hr > best_hr:
+        print('Iteration {} [{:.1f} s]: HR = {:.4f}, NDCG = {:.4f}, loss = {:.4f} [{:.1f} s]'.format
+              (epoch, t2 - t1, hr, ndcg, loss, time() - t2))
+        if hr > best_hr or ndcg > best_ndcg:
             best_hr, best_ndcg, best_iter = hr, ndcg, epoch
-    print("End. Best Iteration %d:  HR = %.4f, NDCG = %.4f. " % (best_iter, best_hr, best_ndcg))
+    print("End. Best Iteration {}:  HR = {:.4f}, NDCG = {:.4f}. ".format(best_iter, best_hr, best_ndcg))
+

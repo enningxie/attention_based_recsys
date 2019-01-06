@@ -33,7 +33,7 @@ def parse_args():
                         help='Input data path.')
     parser.add_argument('--dataset', nargs='?', default='ml-1m',
                         help='Choose a dataset.')
-    parser.add_argument('--epochs', type=int, default=40,
+    parser.add_argument('--epochs', type=int, default=100,
                         help='Number of epochs.')
     parser.add_argument('--batch_size', type=int, default=4096,
                         help='Batch size.')

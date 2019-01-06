@@ -14,7 +14,7 @@ def parse_args():
     parser.add_argument('--data_set', default='ml-1m', type=str)
     parser.add_argument('--epochs', default=100, type=int, help='Number of epochs.')
     parser.add_argument('--batch_size', default=4096, type=int)
-    parser.add_argument('--num_factors', type=int, default=64, help='Embedding size.')
+    parser.add_argument('--num_factors', type=int, default=32, help='Embedding size.')
     parser.add_argument('--num_neg', type=int, default=4,
                         help='Number of negative instances to pair with a positive instance.')
     return parser.parse_args()

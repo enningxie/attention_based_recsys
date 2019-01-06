@@ -21,9 +21,9 @@ def parse_args():
                         help='Number of epochs.')
     parser.add_argument('--batch_size', type=int, default=4096,
                         help='Batch size.')
-    parser.add_argument('--num_factors', type=int, default=8,
+    parser.add_argument('--num_factors', type=int, default=32,
                         help='Embedding size of MF model.')
-    parser.add_argument('--layers', nargs='?', default='[128, 128, 64, 32]',
+    parser.add_argument('--layers', nargs='?', default='[256, 256, 128, 64]',
                         help="MLP layers. Note that the first layer is the concatenation "
                              "of user and item embeddings. So layers[0]/2 is the embedding size.")
     parser.add_argument('--num_neg', type=int, default=4,
